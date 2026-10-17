@@ -6,6 +6,7 @@ import DateGrid from "@/components/DateGrid";
 import LayoverControls from "@/components/LayoverControls";
 import OfferCard from "@/components/OfferCard";
 import Lenses from "@/components/Lenses";
+import Watchlist from "@/components/Watchlist";
 import { applyFilters, DEFAULT_FILTERS } from "@/lib/layovers";
 import type {
   FlightOffer,
@@ -22,6 +23,35 @@ export default function Home() {
   const [filters, setFilters] = useState<LayoverFilters>(DEFAULT_FILTERS);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [watchRefresh, setWatchRefresh] = useState(0);
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
+
+  async function saveToWatchlist() {
+    if (!params) return;
+    setSaveMsg(null);
+    try {
+      const res = await fetch("/api/watchlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          origin: params.origin,
+          destination: params.destination,
+          targetDate: params.date,
+          flexDays,
+          cabinClass: params.cabinClass,
+          maxConnections: params.maxConnections,
+        }),
+      });
+      if (!res.ok) {
+        const j = await res.json();
+        throw new Error(j.error ?? "Could not save");
+      }
+      setSaveMsg("Saved to watchlist — hit Refresh there to capture a price.");
+      setWatchRefresh((n) => n + 1);
+    } catch (e: any) {
+      setSaveMsg(e.message);
+    }
+  }
 
   const visibleOffers = useMemo(
     () => applyFilters(offers, filters),
@@ -91,6 +121,10 @@ export default function Home() {
         </p>
       </header>
 
+      <div className="mb-6">
+        <Watchlist refreshKey={watchRefresh} />
+      </div>
+
       <SearchForm onSearch={handleSearch} loading={loading} />
 
       {error && (
@@ -124,7 +158,19 @@ export default function Home() {
                   {offers.length !== visibleOffers.length &&
                     ` (of ${offers.length}, filtered)`}
                 </h2>
+                <button
+                  onClick={saveToWatchlist}
+                  className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
+                >
+                  📌 Save to watchlist
+                </button>
               </div>
+
+              {saveMsg && (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-700">
+                  {saveMsg}
+                </div>
+              )}
 
               {!loading && offers.length === 0 && (
                 <p className="text-sm text-slate-500">

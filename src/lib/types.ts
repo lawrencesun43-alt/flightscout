@@ -61,3 +61,40 @@ export interface GridCell {
   owner: string | null;
   stops: number | null;
 }
+
+// ── Phase 5: watchlist + price snapshots ─────────────────────
+
+/** A route the user saved to track over time. */
+export interface SavedSearch {
+  id: string;
+  origin: string;
+  destination: string;
+  targetDate: string; // YYYY-MM-DD
+  flexDays: number;
+  cabinClass: SearchParams["cabinClass"];
+  maxConnections?: number;
+  createdAt: string; // ISO
+}
+
+/** One recorded "cheapest price" reading for a saved search. */
+export interface PriceSnapshot {
+  id: string;
+  searchId: string; // → SavedSearch.id
+  date: string; // the cheapest date in the window (YYYY-MM-DD)
+  cheapestAmount: number;
+  currency: string;
+  owner: string; // airline
+  stops: number;
+  capturedAt: string; // ISO
+}
+
+/** Derived trend info for showing "is this cheap?". */
+export interface PriceStats {
+  current: number | null;
+  min: number | null;
+  max: number | null;
+  avg: number | null;
+  verdict: "low" | "normal" | "high" | "unknown";
+  changeFromPrevious: number | null; // + = went up since last reading
+  points: number[]; // chronological amounts, for a sparkline
+}

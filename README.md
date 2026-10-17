@@ -103,9 +103,34 @@ src/
     types.ts              # shared types
 ```
 
+## Watchlist & price tracking (Phase 5)
+
+Save any search to a **watchlist** and track whether its price is cheap right
+now — a personalized version of Google Flights' "low / normal / high", built
+from *your own* search history.
+
+**How it works**
+- Click **📌 Save to watchlist** on a results page. The route + date + flex
+  window + cabin are stored in `data/watchlist.json`.
+- Hit **Refresh** on a watchlist item to capture a **price snapshot**: it
+  re-runs the flexible-date search, finds the single cheapest offer across the
+  window, and appends a reading to `data/snapshots.json`.
+- Each reading feeds a **sparkline** and a **verdict**:
+  - `low` — within 5% of the cheapest you've ever recorded
+  - `high` — within 5% of the most expensive
+  - `normal` — in between (needs ≥2 readings; otherwise `unknown`)
+- The ▲/▼ badge shows the change since your previous reading.
+
+**Data files** (gitignored) live in `/data`:
+- `watchlist.json` — saved searches
+- `snapshots.json` — price history
+
+**Automating snapshots:** the capture is a plain `POST /api/watchlist/snapshot?id=<id>`.
+To build history without clicking, hit that endpoint on a schedule — e.g. a cron
+job, a GitHub Action, or Vercel Cron — once a day per watch.
+
 ## Roadmap (next phases)
-- **Watchlist + price snapshots** — save a search, store the daily cheapest in
-  `/data`, show a trend sparkline ("is this cheap vs last week?").
 - **Round-trip** — add a second slice to the offer request.
 - **Caching** — reuse recent grid results to stay under Duffel's rate limit
   (1 request / 100ms).
+- **Price-drop alerts** — email/push when a watched route goes `low`.
