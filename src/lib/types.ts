@@ -49,6 +49,14 @@ export interface FlightOffer {
 
 export type TripType = "one_way" | "round_trip";
 
+/** An airport or city suggestion for autocomplete. */
+export interface Place {
+  iataCode: string; // "SIN"
+  name: string; // "Singapore Changi Airport"
+  cityName: string; // "Singapore"
+  type: "airport" | "city";
+}
+
 /** The search the user asked for. */
 export interface SearchParams {
   origin: string;

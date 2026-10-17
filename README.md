@@ -10,6 +10,9 @@ separate tabs:
 4. **Student & points lenses** — pre-filled deep-links to StudentUniverse,
    Flyla, Seats.aero and point.me for the exact route you searched
 
+Plus: **airport/city autocomplete**, round-trip support, a price-tracking
+watchlist, and loading skeletons.
+
 Built with Next.js (App Router) + TypeScript + Tailwind. Backend logic lives in
 Next.js API routes so your Duffel token never reaches the browser.
 
@@ -178,8 +181,44 @@ instant within a session).
 - The watchlist **snapshot** now fetches its ± window in parallel (staggered),
   down from a sequential loop (~14s → ~5s).
 
+## Airport autocomplete
+
+The From/To fields are now type-ahead: start typing a city or airport (e.g.
+"sing", "brisb") and pick from a dropdown of matches powered by Duffel's
+[Places API](https://duffel.com/docs/api/places) (`GET /api/places?q=...`). You
+can still type a raw 3-letter IATA code directly. Suggestions are cached 1 hour.
+
+## Deploying to Vercel
+
+The app runs great locally, but deploying makes it a real tool you can open from
+your phone. Vercel is the natural home for a Next.js app and has a free tier.
+
+**One-time setup:**
+
+1. Create a free account at [vercel.com](https://vercel.com) and connect your
+   GitHub.
+2. Click **Add New… → Project**, import the `flightscout` repo, and accept the
+   detected Next.js settings (no changes needed).
+3. **Before the first deploy finishes**, add your token under
+   **Settings → Environment Variables**:
+   - `DUFFEL_API_TOKEN` = your `duffel_test_...` (or `duffel_live_...`) token
+   - `DUFFEL_API_VERSION` = `v2`
+   Add them for the **Production** (and Preview) environments.
+   > `.env.local` is **never** uploaded to Vercel — you must set these in the
+   > dashboard or the token won't be available in production.
+4. Trigger a redeploy (Deployments → ⋯ → Redeploy) so it picks up the vars.
+
+After that, **every push to `main` auto-deploys.** `git push` → live in ~1 min.
+
+**Notes:**
+- `vercel.json` raises the API function timeout to 60s so slow round-trip
+  searches don't get cut off.
+- The in-memory cache (`src/lib/cache.ts`) doesn't persist across serverless
+  invocations on Vercel — it just degrades to a cache miss (still correct, no
+  crash). For a persistent cache there, back it with Vercel KV / Upstash Redis.
+
 ## Roadmap (next phases)
 - **Progressive grid** — stream each day's price as it arrives, so cells pop in
   one by one rather than all at once.
 - **Price-drop alerts** — email/push when a watched route goes `low`.
-- **Round-trip grid matrix** — optionally price outbound×return combinations.
+- **Persistent cache on Vercel** — Upstash/Vercel KV so caching works in prod.

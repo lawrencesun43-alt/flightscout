@@ -8,6 +8,13 @@
 // (fresh prices after a restart, instant within a session).
 // ─────────────────────────────────────────────────────────────
 
+// Deployment note: on serverless platforms (e.g. Vercel) each
+// invocation may run in a fresh process, so this cache won't persist
+// between requests there — it simply degrades to a cache MISS, which
+// is still correct (just no speedup). For a persistent cross-request
+// cache on Vercel, back TtlCache with Upstash Redis or Vercel KV.
+// Locally (one long-running `next dev` process) it works fully.
+
 interface Entry<V> {
   value: V;
   expiresAt: number;

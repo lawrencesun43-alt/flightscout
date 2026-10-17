@@ -6,7 +6,14 @@
 // Docs: https://duffel.com/docs/api/offer-requests
 // ─────────────────────────────────────────────────────────────
 
-import type { FlightOffer, Segment, Layover, Slice, SearchParams } from "./types";
+import type {
+  FlightOffer,
+  Segment,
+  Layover,
+  Slice,
+  SearchParams,
+  Place,
+} from "./types";
 
 const DUFFEL_BASE = "https://api.duffel.com";
 
@@ -185,4 +192,45 @@ function normalizeOffer(raw: any): FlightOffer {
     maxStops,
     totalDurationMinutes,
   };
+}
+
+// ─────────────────────────────────────────────────────────────
+// Places / airport autocomplete.
+// GET /places/suggestions?query=... returns matching airports and
+// cities. Same token. Docs: https://duffel.com/docs/api/places
+// ─────────────────────────────────────────────────────────────
+
+export async function suggestPlaces(query: string): Promise<Place[]> {
+  const q = query.trim();
+  if (q.length < 2) return []; // avoid noise on 0–1 char queries
+
+  const { token, version } = getConfig();
+
+  const url = `${DUFFEL_BASE}/places/suggestions?query=${encodeURIComponent(q)}`;
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Duffel-Version": version,
+      Accept: "application/json",
+    },
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Duffel places error ${res.status}: ${text.slice(0, 300)}`);
+  }
+
+  const json = await res.json();
+  const raw: any[] = json?.data ?? [];
+
+  return raw
+    .map((p): Place => ({
+      iataCode: p.iata_code ?? "",
+      name: p.name ?? "",
+      cityName: p.city_name ?? p.city?.name ?? p.name ?? "",
+      type: p.type === "city" ? "city" : "airport",
+    }))
+    .filter((p) => p.iataCode); // only places we can actually search
 }

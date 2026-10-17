@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { SearchParams, TripType } from "@/lib/types";
 import { shiftDate } from "@/lib/dates";
+import AirportInput from "./AirportInput";
 
 interface Props {
   onSearch: (params: SearchParams, flexDays: number) => void;
@@ -83,23 +84,19 @@ export default function SearchForm({ onSearch, loading }: Props) {
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-7">
         <div className="col-span-1">
-          <label className="block text-xs font-medium text-slate-500">From</label>
-          <input
+          <AirportInput
+            label="From"
             value={origin}
-            onChange={(e) => setOrigin(e.target.value)}
-            placeholder="LHR"
-            maxLength={3}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 uppercase"
+            onChange={setOrigin}
+            placeholder="City or LHR"
           />
         </div>
         <div className="col-span-1">
-          <label className="block text-xs font-medium text-slate-500">To</label>
-          <input
+          <AirportInput
+            label="To"
             value={destination}
-            onChange={(e) => setDestination(e.target.value)}
-            placeholder="JFK"
-            maxLength={3}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 uppercase"
+            onChange={setDestination}
+            placeholder="City or JFK"
           />
         </div>
         <div className="col-span-1">
