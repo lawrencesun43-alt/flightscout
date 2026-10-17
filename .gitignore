@@ -1,0 +1,24 @@
+# dependencies
+/node_modules
+
+# next.js
+/.next
+/out
+
+# production
+/build
+
+# env — NEVER commit your real token
+.env.local
+.env*.local
+
+# local data store (price snapshots / saved searches)
+/data/*.json
+!/data/.gitkeep
+
+# misc
+.DS_Store
+*.log
+
+# local Kiro tooling config
+/.kiro/
