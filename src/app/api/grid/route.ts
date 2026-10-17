@@ -68,7 +68,9 @@ export async function POST(req: Request) {
           cabinClass: body.cabinClass,
           maxConnections: gridMaxConnections,
         },
-        { cheapestOnly: true }
+        // Short per-airline timeout: the grid is just a price
+        // indicator, so don't wait on slow suppliers.
+        { supplierTimeoutMs: 4000 }
       );
       if (offers.length === 0) {
         return { date, cheapestAmount: null, currency: null, owner: null, stops: null };

@@ -13,12 +13,15 @@ const DUFFEL_BASE = "https://api.duffel.com";
 /** Extra knobs for tuning a search (used by the grid for speed). */
 export interface SearchOptions {
   /**
-   * Ask Duffel to return only the single cheapest offer. Hugely
-   * faster for long-haul routes where a full search returns
-   * hundreds of itineraries. Used by the flexible-date grid, which
-   * only needs the cheapest price per day.
+   * How long (ms) Duffel waits for EACH airline to respond, before
+   * returning whatever it has. This is the real speed lever: Duffel
+   * otherwise waits up to 20s (default) for the slowest supplier.
+   * Range 2000–60000. The flexible-date grid only needs a cheapest-
+   * price indicator, so it sets this low (~4s) — fast suppliers still
+   * answer; slow ones are simply skipped for the grid.
+   * Docs: https://duffel.com/docs/api/overview/response-times
    */
-  cheapestOnly?: boolean;
+  supplierTimeoutMs?: number;
 }
 
 function getConfig() {
@@ -83,11 +86,17 @@ export async function searchOffers(
     },
   };
 
-  // `supplier_timeout` + `return_offers=false`-style trimming isn't
-  // exposed here; instead we use the query flag below for the grid.
-  const qs = options.cheapestOnly
-    ? "?return_offers=true" // keep inline offers; sorting handled client-side
-    : "";
+  // supplier_timeout (ms, 2000–60000) is the real speed lever: it
+  // caps how long Duffel waits for each airline before returning.
+  const qsParams = new URLSearchParams();
+  if (options.supplierTimeoutMs !== undefined) {
+    const clamped = Math.min(
+      Math.max(Math.round(options.supplierTimeoutMs), 2000),
+      60000
+    );
+    qsParams.set("supplier_timeout", String(clamped));
+  }
+  const qs = qsParams.toString() ? `?${qsParams.toString()}` : "";
 
   const res = await fetch(`${DUFFEL_BASE}/air/offer_requests${qs}`, {
     method: "POST",

@@ -48,7 +48,7 @@ export async function POST(req: Request) {
           cabinClass: w.cabinClass,
           maxConnections: w.maxConnections !== undefined ? w.maxConnections : 1,
         },
-        { cheapestOnly: true }
+        { supplierTimeoutMs: 4000 }
       );
       for (const o of offers) {
         if (!best || o.totalAmount < best.amount) {
