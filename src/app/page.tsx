@@ -37,6 +37,8 @@ export default function Home() {
           origin: params.origin,
           destination: params.destination,
           targetDate: params.date,
+          returnDate: params.returnDate,
+          tripType: params.tripType,
           flexDays,
           cabinClass: params.cabinClass,
           maxConnections: params.maxConnections,

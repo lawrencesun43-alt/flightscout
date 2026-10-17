@@ -35,14 +35,21 @@ export async function POST(req: Request) {
 
   for (const date of dates) {
     try {
-      const offers = await searchOffers({
-        origin: w.origin,
-        destination: w.destination,
-        date,
-        adults: 1,
-        cabinClass: w.cabinClass,
-        maxConnections: w.maxConnections,
-      });
+      // Consistent with the grid (option A): track the cheapest
+      // ONE-WAY outbound price as the indicator, capped connections
+      // for speed.
+      const offers = await searchOffers(
+        {
+          origin: w.origin,
+          destination: w.destination,
+          date,
+          tripType: "one_way",
+          adults: 1,
+          cabinClass: w.cabinClass,
+          maxConnections: w.maxConnections !== undefined ? w.maxConnections : 1,
+        },
+        { cheapestOnly: true }
+      );
       for (const o of offers) {
         if (!best || o.totalAmount < best.amount) {
           best = {
@@ -50,7 +57,7 @@ export async function POST(req: Request) {
             amount: o.totalAmount,
             currency: o.currency,
             owner: o.owner,
-            stops: o.stops,
+            stops: o.maxStops,
           };
         }
       }

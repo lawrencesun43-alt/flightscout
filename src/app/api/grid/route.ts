@@ -43,18 +43,33 @@ export async function POST(req: Request) {
   const flexDays = Math.min(Math.max(body.flexDays ?? 3, 0), 5);
   const dates = buildDateWindow(body.date, flexDays);
 
+  // SPEED: the grid only needs the cheapest price per day, as a
+  // price *indicator*. So we:
+  //   1. Always search ONE-WAY (outbound only), even on round-trip
+  //      — option A: the grid varies the outbound date. Full
+  //      round-trip pricing happens in the detailed results below.
+  //   2. Cap connections (default 1) so Duffel returns far fewer
+  //      itineraries → each call is much faster on long-haul routes.
+  const gridMaxConnections =
+    body.maxConnections !== undefined ? body.maxConnections : 1;
+
   // Batches of 3 keep us comfortably under Duffel's rate limit
   // (1 request / 100ms).
   const cells: GridCell[] = await inBatches(dates, 3, async (date) => {
     try {
-      const offers = await searchOffers({
-        origin: body.origin,
-        destination: body.destination,
-        date,
-        adults: body.adults || 1,
-        cabinClass: body.cabinClass,
-        maxConnections: body.maxConnections,
-      });
+      const offers = await searchOffers(
+        {
+          origin: body.origin,
+          destination: body.destination,
+          date,
+          // grid is always a one-way outbound indicator (option A)
+          tripType: "one_way",
+          adults: body.adults || 1,
+          cabinClass: body.cabinClass,
+          maxConnections: gridMaxConnections,
+        },
+        { cheapestOnly: true }
+      );
       if (offers.length === 0) {
         return { date, cheapestAmount: null, currency: null, owner: null, stops: null };
       }
@@ -66,7 +81,7 @@ export async function POST(req: Request) {
         cheapestAmount: cheapest.totalAmount,
         currency: cheapest.currency,
         owner: cheapest.owner,
-        stops: cheapest.stops,
+        stops: cheapest.maxStops,
       };
     } catch {
       return { date, cheapestAmount: null, currency: null, owner: null, stops: null };

@@ -22,23 +22,40 @@ export interface Layover {
   durationMinutes: number;
 }
 
+/**
+ * One direction of a journey (e.g. the outbound, or the return).
+ * A one-way offer has one slice; a round-trip has two.
+ */
+export interface Slice {
+  origin: string;
+  destination: string;
+  segments: Segment[];
+  layovers: Layover[];
+  stops: number; // == layovers.length
+  durationMinutes: number; // first departure → last arrival for this slice
+}
+
 /** One bookable offer, normalized for the UI. */
 export interface FlightOffer {
   id: string;
   totalAmount: number;
   currency: string;
   owner: string; // airline that owns the offer
-  segments: Segment[];
-  layovers: Layover[];
-  stops: number; // == layovers.length
-  totalDurationMinutes: number; // door-to-door
+  slices: Slice[]; // 1 = one-way, 2 = round-trip
+  /** Worst (highest) stop count across all slices — used for filtering. */
+  maxStops: number;
+  totalDurationMinutes: number; // sum of all slices' flying time
 }
+
+export type TripType = "one_way" | "round_trip";
 
 /** The search the user asked for. */
 export interface SearchParams {
   origin: string;
   destination: string;
-  date: string; // YYYY-MM-DD
+  date: string; // YYYY-MM-DD (outbound)
+  returnDate?: string; // YYYY-MM-DD — present only for round-trip
+  tripType?: TripType; // defaults to one_way
   adults: number;
   cabinClass?: "economy" | "premium_economy" | "business" | "first";
   maxConnections?: number; // sent to Duffel to cap stops server-side
@@ -69,7 +86,9 @@ export interface SavedSearch {
   id: string;
   origin: string;
   destination: string;
-  targetDate: string; // YYYY-MM-DD
+  targetDate: string; // YYYY-MM-DD (outbound)
+  returnDate?: string; // YYYY-MM-DD — present only for round-trip
+  tripType?: TripType; // defaults to one_way
   flexDays: number;
   cabinClass: SearchParams["cabinClass"];
   maxConnections?: number;

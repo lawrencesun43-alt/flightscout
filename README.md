@@ -129,8 +129,34 @@ from *your own* search history.
 To build history without clicking, hit that endpoint on a schedule — e.g. a cron
 job, a GitHub Action, or Vercel Cron — once a day per watch.
 
+## Round-trip support
+
+Use the **One-way / Round-trip** toggle in the search form. Round-trip adds a
+return-date field (defaults to outbound + 7 days, editable).
+
+- Under the hood, round-trip sends Duffel **two slices** (outbound, then the
+  reversed route on the return date). Offers are modeled as `slices[]`, so each
+  offer card shows a labelled **Outbound** and **Return** with their own
+  segments and layovers.
+- **Layover filters apply to both directions** — e.g. "avoid CDG" excludes an
+  offer if *either* leg connects through CDG; "max 1 stop" requires *both* legs
+  to satisfy it.
+- **The date grid stays on the outbound day** (option A): it varies the
+  outbound date ±flex as a fast price *indicator*, while the detailed results
+  below are true round-trip offers for the selected dates.
+
+## Grid performance
+
+Long-haul searches can return hundreds of itineraries, which made the
+flexible-date grid slow (one search per day). The grid now:
+- searches **one-way outbound only** (it only needs a per-day price indicator), and
+- caps `max_connections` (default 1) so Duffel returns far fewer itineraries.
+
+This keeps the grid responsive even on long-haul routes. Full, uncapped results
+(including round-trip) are fetched separately for the selected date.
+
 ## Roadmap (next phases)
-- **Round-trip** — add a second slice to the offer request.
-- **Caching** — reuse recent grid results to stay under Duffel's rate limit
-  (1 request / 100ms).
+- **Grid caching** — reuse recent grid results to stay under Duffel's rate
+  limit (1 request / 100ms) and make repeat searches instant.
 - **Price-drop alerts** — email/push when a watched route goes `low`.
+- **Round-trip grid matrix** — optionally price outbound×return combinations.

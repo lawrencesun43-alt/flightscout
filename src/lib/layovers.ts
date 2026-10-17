@@ -14,14 +14,24 @@ export const DEFAULT_FILTERS: LayoverFilters = {
   preferAirports: [],
 };
 
-/** Does this offer pass every active layover constraint? */
+/** All layovers across every slice (outbound + return). */
+function allLayovers(offer: FlightOffer) {
+  return offer.slices.flatMap((s) => s.layovers);
+}
+
+/**
+ * Does this offer pass every active layover constraint?
+ * Applied across ALL slices — so on a round-trip, both the
+ * outbound and the return must satisfy the filters.
+ */
 export function offerPasses(
   offer: FlightOffer,
   f: LayoverFilters
 ): boolean {
-  if (offer.stops > f.maxStops) return false;
+  // maxStops is checked against the worst slice.
+  if (offer.maxStops > f.maxStops) return false;
 
-  for (const lay of offer.layovers) {
+  for (const lay of allLayovers(offer)) {
     if (lay.durationMinutes < f.minLayoverMinutes) return false;
     if (lay.durationMinutes > f.maxLayoverMinutes) return false;
     if (f.avoidAirports.includes(lay.airport)) return false;
@@ -29,13 +39,13 @@ export function offerPasses(
   return true;
 }
 
-/** True if any layover is at a "preferred" airport (for UI badging). */
+/** True if any layover (either direction) is at a "preferred" airport. */
 export function hasPreferredLayover(
   offer: FlightOffer,
   f: LayoverFilters
 ): boolean {
   if (f.preferAirports.length === 0) return false;
-  return offer.layovers.some((l) => f.preferAirports.includes(l.airport));
+  return allLayovers(offer).some((l) => f.preferAirports.includes(l.airport));
 }
 
 /**

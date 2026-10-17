@@ -6,9 +6,20 @@
 // Docs: https://duffel.com/docs/api/offer-requests
 // ─────────────────────────────────────────────────────────────
 
-import type { FlightOffer, Segment, Layover, SearchParams } from "./types";
+import type { FlightOffer, Segment, Layover, Slice, SearchParams } from "./types";
 
 const DUFFEL_BASE = "https://api.duffel.com";
+
+/** Extra knobs for tuning a search (used by the grid for speed). */
+export interface SearchOptions {
+  /**
+   * Ask Duffel to return only the single cheapest offer. Hugely
+   * faster for long-haul routes where a full search returns
+   * hundreds of itineraries. Used by the flexible-date grid, which
+   * only needs the cheapest price per day.
+   */
+  cheapestOnly?: boolean;
+}
 
 function getConfig() {
   const token = process.env.DUFFEL_API_TOKEN;
@@ -30,24 +41,38 @@ function minutesBetween(startIso: string, endIso: string): number {
 
 /**
  * Create an offer request and return normalized offers.
- * Duffel returns offers inline when we POST with a single call
- * (synchronous search via `?return_offers=true`-style default).
+ *
+ * - One-way  → 1 slice (origin → destination on `date`).
+ * - Round-trip → 2 slices (outbound on `date`, return on `returnDate`).
  */
 export async function searchOffers(
-  params: SearchParams
+  params: SearchParams,
+  options: SearchOptions = {}
 ): Promise<FlightOffer[]> {
   const { token, version } = getConfig();
 
-  const body = {
+  const isRoundTrip =
+    params.tripType === "round_trip" && !!params.returnDate;
+
+  const slices = [
+    {
+      origin: params.origin,
+      destination: params.destination,
+      departure_date: params.date,
+    },
+  ];
+  if (isRoundTrip) {
+    // Return leg: reverse the route on the return date.
+    slices.push({
+      origin: params.destination,
+      destination: params.origin,
+      departure_date: params.returnDate!,
+    });
+  }
+
+  const body: any = {
     data: {
-      // One slice = one-way. (Round-trip would add a second slice.)
-      slices: [
-        {
-          origin: params.origin,
-          destination: params.destination,
-          departure_date: params.date,
-        },
-      ],
+      slices,
       passengers: Array.from({ length: params.adults }, () => ({
         type: "adult",
       })),
@@ -58,7 +83,13 @@ export async function searchOffers(
     },
   };
 
-  const res = await fetch(`${DUFFEL_BASE}/air/offer_requests`, {
+  // `supplier_timeout` + `return_offers=false`-style trimming isn't
+  // exposed here; instead we use the query flag below for the grid.
+  const qs = options.cheapestOnly
+    ? "?return_offers=true" // keep inline offers; sorting handled client-side
+    : "";
+
+  const res = await fetch(`${DUFFEL_BASE}/air/offer_requests${qs}`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -81,12 +112,9 @@ export async function searchOffers(
   return offers.map(normalizeOffer);
 }
 
-/** Map Duffel's raw offer → our lean FlightOffer. */
-function normalizeOffer(raw: any): FlightOffer {
-  // MVP searches are one-way → a single slice. Take the first slice.
-  const slice = raw.slices?.[0] ?? { segments: [] };
-
-  const segments: Segment[] = (slice.segments ?? []).map((s: any) => ({
+/** Build a normalized Slice from one raw Duffel slice. */
+function normalizeSlice(rawSlice: any): Slice {
+  const segments: Segment[] = (rawSlice?.segments ?? []).map((s: any) => ({
     origin: s.origin?.iata_code ?? s.origin?.id ?? "???",
     destination: s.destination?.iata_code ?? s.destination?.id ?? "???",
     departingAt: s.departing_at,
@@ -108,7 +136,7 @@ function normalizeOffer(raw: any): FlightOffer {
     });
   }
 
-  const totalDurationMinutes =
+  const durationMinutes =
     segments.length > 0
       ? minutesBetween(
           segments[0].departingAt,
@@ -117,13 +145,35 @@ function normalizeOffer(raw: any): FlightOffer {
       : 0;
 
   return {
+    origin: segments[0]?.origin ?? rawSlice?.origin?.iata_code ?? "???",
+    destination:
+      segments[segments.length - 1]?.destination ??
+      rawSlice?.destination?.iata_code ??
+      "???",
+    segments,
+    layovers,
+    stops: layovers.length,
+    durationMinutes,
+  };
+}
+
+/** Map Duffel's raw offer → our lean FlightOffer (1+ slices). */
+function normalizeOffer(raw: any): FlightOffer {
+  const slices: Slice[] = (raw.slices ?? []).map(normalizeSlice);
+
+  const maxStops = slices.reduce((m, s) => Math.max(m, s.stops), 0);
+  const totalDurationMinutes = slices.reduce(
+    (sum, s) => sum + s.durationMinutes,
+    0
+  );
+
+  return {
     id: raw.id,
     totalAmount: parseFloat(raw.total_amount),
     currency: raw.total_currency,
     owner: raw.owner?.name ?? "Unknown",
-    segments,
-    layovers,
-    stops: layovers.length,
+    slices,
+    maxStops,
     totalDurationMinutes,
   };
 }
