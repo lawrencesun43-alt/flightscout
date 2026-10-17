@@ -24,47 +24,59 @@ export async function POST(req: Request) {
 
   const dates = buildDateWindow(w.targetDate, w.flexDays);
 
-  // Find the single cheapest offer across the whole window.
-  let best: {
+  type Candidate = {
     date: string;
     amount: number;
     currency: string;
     owner: string;
     stops: number;
-  } | null = null;
+  };
 
-  for (const date of dates) {
-    try {
-      // Consistent with the grid (option A): track the cheapest
-      // ONE-WAY outbound price as the indicator, capped connections
-      // for speed.
-      const offers = await searchOffers(
-        {
-          origin: w.origin,
-          destination: w.destination,
-          date,
-          tripType: "one_way",
-          adults: 1,
-          cabinClass: w.cabinClass,
-          maxConnections: w.maxConnections !== undefined ? w.maxConnections : 1,
-        },
-        { supplierTimeoutMs: 4000 }
-      );
-      for (const o of offers) {
-        if (!best || o.totalAmount < best.amount) {
-          best = {
+  const STAGGER_MS = 110; // stay under Duffel's ~1 req/100ms limit
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  // Fire one search per day in PARALLEL (staggered), each returning
+  // that day's cheapest candidate. Same fast one-way indicator the
+  // grid uses (option A). Was a sequential loop (~14s) → now ~5s.
+  const perDay = await Promise.all(
+    dates.map(async (date, i): Promise<Candidate | null> => {
+      await sleep(i * STAGGER_MS);
+      try {
+        const offers = await searchOffers(
+          {
+            origin: w.origin,
+            destination: w.destination,
             date,
-            amount: o.totalAmount,
-            currency: o.currency,
-            owner: o.owner,
-            stops: o.maxStops,
-          };
-        }
+            tripType: "one_way",
+            adults: 1,
+            cabinClass: w.cabinClass,
+            maxConnections:
+              w.maxConnections !== undefined ? w.maxConnections : 1,
+          },
+          { supplierTimeoutMs: 4000 }
+        );
+        if (offers.length === 0) return null;
+        const cheapest = offers.reduce((a, b) =>
+          a.totalAmount <= b.totalAmount ? a : b
+        );
+        return {
+          date,
+          amount: cheapest.totalAmount,
+          currency: cheapest.currency,
+          owner: cheapest.owner,
+          stops: cheapest.maxStops,
+        };
+      } catch {
+        return null; // skip a failing date, keep the rest
       }
-    } catch {
-      // Skip a failing date; keep scanning the rest of the window.
-    }
-  }
+    })
+  );
+
+  // Pick the single cheapest across the whole window.
+  const best = perDay.reduce<Candidate | null>((acc, c) => {
+    if (!c) return acc;
+    return !acc || c.amount < acc.amount ? c : acc;
+  }, null);
 
   if (!best) {
     return NextResponse.json(

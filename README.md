@@ -167,7 +167,19 @@ clicking between grid days you've already viewed returns immediately. The cache
 is in-memory and resets when the dev server restarts (fresh prices on restart,
 instant within a session).
 
+## Loading states & search speed
+
+- The detailed search caps each airline's response at **10s** (vs Duffel's 20s
+  default), roughly halving worst-case round-trip search time while keeping
+  results from all reasonably-fast suppliers.
+- While a search is in flight the page shows **animated skeletons** for the
+  date grid and offer list (plus a "Searching…" label), so it never looks blank
+  or broken during the wait.
+- The watchlist **snapshot** now fetches its ± window in parallel (staggered),
+  down from a sequential loop (~14s → ~5s).
+
 ## Roadmap (next phases)
-- **Progressive grid** — stream each day's price as it arrives, so cells pop in.
+- **Progressive grid** — stream each day's price as it arrives, so cells pop in
+  one by one rather than all at once.
 - **Price-drop alerts** — email/push when a watched route goes `low`.
 - **Round-trip grid matrix** — optionally price outbound×return combinations.

@@ -44,7 +44,11 @@ export async function POST(req: Request) {
   try {
     const normalized: SearchParams = { ...params, adults: params.adults || 1 };
     const offers = await searchCache.getOrCompute(keyFor(normalized), () =>
-      searchOffers(normalized)
+      // Cap each airline's response at 10s (vs Duffel's 20s default):
+      // keeps results from all reasonably-fast suppliers while not
+      // waiting on the single slowest — roughly halves worst-case
+      // round-trip search time.
+      searchOffers(normalized, { supplierTimeoutMs: 10000 })
     );
     return NextResponse.json({ offers });
   } catch (err: any) {

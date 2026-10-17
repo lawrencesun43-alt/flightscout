@@ -7,6 +7,7 @@ import LayoverControls from "@/components/LayoverControls";
 import OfferCard from "@/components/OfferCard";
 import Lenses from "@/components/Lenses";
 import Watchlist from "@/components/Watchlist";
+import { DateGridSkeleton, OffersSkeleton } from "@/components/Skeleton";
 import { applyFilters, DEFAULT_FILTERS } from "@/lib/layovers";
 import type {
   FlightOffer,
@@ -137,12 +138,14 @@ export default function Home() {
 
       {params && (
         <div className="mt-6 space-y-6">
-          {cells.length > 0 && (
+          {cells.length > 0 ? (
             <DateGrid
               cells={cells}
               selectedDate={params.date}
               onPick={handlePickDate}
             />
+          ) : (
+            loading && <DateGridSkeleton />
           )}
 
           <Lenses params={params} />
@@ -155,14 +158,21 @@ export default function Home() {
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-slate-700">
-                  {visibleOffers.length} offer
-                  {visibleOffers.length !== 1 ? "s" : ""}
-                  {offers.length !== visibleOffers.length &&
-                    ` (of ${offers.length}, filtered)`}
+                  {loading && offers.length === 0 ? (
+                    "Searching…"
+                  ) : (
+                    <>
+                      {visibleOffers.length} offer
+                      {visibleOffers.length !== 1 ? "s" : ""}
+                      {offers.length !== visibleOffers.length &&
+                        ` (of ${offers.length}, filtered)`}
+                    </>
+                  )}
                 </h2>
                 <button
                   onClick={saveToWatchlist}
-                  className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
+                  disabled={loading}
+                  className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
                 >
                   📌 Save to watchlist
                 </button>
@@ -174,16 +184,21 @@ export default function Home() {
                 </div>
               )}
 
-              {!loading && offers.length === 0 && (
-                <p className="text-sm text-slate-500">
-                  No offers for this date. In the Duffel sandbox, try LHR→JFK or
-                  LGW→JFK with a near-future date.
-                </p>
+              {loading && offers.length === 0 ? (
+                <OffersSkeleton />
+              ) : (
+                <>
+                  {!loading && offers.length === 0 && (
+                    <p className="text-sm text-slate-500">
+                      No offers for this date. In the Duffel sandbox, try
+                      LHR→JFK or LGW→JFK with a near-future date.
+                    </p>
+                  )}
+                  {visibleOffers.map((o) => (
+                    <OfferCard key={o.id} offer={o} filters={filters} />
+                  ))}
+                </>
               )}
-
-              {visibleOffers.map((o) => (
-                <OfferCard key={o.id} offer={o} filters={filters} />
-              ))}
             </div>
           </div>
         </div>
