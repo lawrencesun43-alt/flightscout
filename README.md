@@ -155,8 +155,19 @@ flexible-date grid slow (one search per day). The grid now:
 This keeps the grid responsive even on long-haul routes. Full, uncapped results
 (including round-trip) are fetched separately for the selected date.
 
+On top of this, the grid now:
+- **runs all days in parallel** (lightly staggered ~110ms apart to respect
+  Duffel's ~1 req/100ms rate limit) instead of in sequential batches, so total
+  time ≈ the single slowest call rather than the sum; and
+- **caches each day's cheapest-price cell for 10 minutes** (`src/lib/cache.ts`),
+  so re-searching a route or clicking around the date grid is instant.
+
+Full search results (`/api/search`) are likewise cached for 5 minutes, so
+clicking between grid days you've already viewed returns immediately. The cache
+is in-memory and resets when the dev server restarts (fresh prices on restart,
+instant within a session).
+
 ## Roadmap (next phases)
-- **Grid caching** — reuse recent grid results to stay under Duffel's rate
-  limit (1 request / 100ms) and make repeat searches instant.
+- **Progressive grid** — stream each day's price as it arrives, so cells pop in.
 - **Price-drop alerts** — email/push when a watched route goes `low`.
 - **Round-trip grid matrix** — optionally price outbound×return combinations.

@@ -1,29 +1,28 @@
 // POST /api/grid  → cheapest price per date across a ± window.
-// Fires one Duffel search per date, in parallel (bounded), and
-// returns just the cheapest cell for each day.
+//
+// Each day's cheapest price is fetched as a lightweight one-way
+// "indicator" (option A). All days run in PARALLEL (lightly
+// staggered to respect Duffel's rate limit) and each day is CACHED,
+// so repeat searches and date-grid clicks are instant.
 
 import { NextResponse } from "next/server";
 import { searchOffers } from "@/lib/duffel";
 import { buildDateWindow } from "@/lib/dates";
+import { TtlCache } from "@/lib/cache";
 import type { GridCell, SearchParams } from "@/lib/types";
 
 interface GridBody extends SearchParams {
   flexDays: number;
 }
 
-/** Resolve promises in small batches to respect Duffel rate limits. */
-async function inBatches<T, R>(
-  items: T[],
-  size: number,
-  fn: (item: T) => Promise<R>
-): Promise<R[]> {
-  const out: R[] = [];
-  for (let i = 0; i < items.length; i += size) {
-    const batch = items.slice(i, i + size);
-    out.push(...(await Promise.all(batch.map(fn))));
-  }
-  return out;
-}
+// Cache each day's cheapest-price cell for 10 minutes. Module-level
+// so it persists across requests within the running server.
+const GRID_CELL_TTL_MS = 10 * 60 * 1000;
+const gridCache = new TtlCache<GridCell>(GRID_CELL_TTL_MS);
+
+/** Duffel's documented rate limit is ~1 request / 100ms. */
+const STAGGER_MS = 110;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export async function POST(req: Request) {
   let body: GridBody;
@@ -43,52 +42,68 @@ export async function POST(req: Request) {
   const flexDays = Math.min(Math.max(body.flexDays ?? 3, 0), 5);
   const dates = buildDateWindow(body.date, flexDays);
 
-  // SPEED: the grid only needs the cheapest price per day, as a
-  // price *indicator*. So we:
-  //   1. Always search ONE-WAY (outbound only), even on round-trip
-  //      — option A: the grid varies the outbound date. Full
-  //      round-trip pricing happens in the detailed results below.
-  //   2. Cap connections (default 1) so Duffel returns far fewer
-  //      itineraries → each call is much faster on long-haul routes.
+  // SPEED/accuracy notes:
+  //  - Always search ONE-WAY outbound (option A): the grid varies the
+  //    outbound date as a price indicator; full round-trip pricing is
+  //    in the detailed results.
+  //  - Cap connections (default 1) → far fewer itineraries.
   const gridMaxConnections =
     body.maxConnections !== undefined ? body.maxConnections : 1;
+  const cabin = body.cabinClass ?? "economy";
 
-  // Batches of 3 keep us comfortably under Duffel's rate limit
-  // (1 request / 100ms).
-  const cells: GridCell[] = await inBatches(dates, 3, async (date) => {
-    try {
-      const offers = await searchOffers(
-        {
-          origin: body.origin,
-          destination: body.destination,
-          date,
-          // grid is always a one-way outbound indicator (option A)
-          tripType: "one_way",
-          adults: body.adults || 1,
-          cabinClass: body.cabinClass,
-          maxConnections: gridMaxConnections,
-        },
-        // Short per-airline timeout: the grid is just a price
-        // indicator, so don't wait on slow suppliers.
-        { supplierTimeoutMs: 4000 }
-      );
-      if (offers.length === 0) {
-        return { date, cheapestAmount: null, currency: null, owner: null, stops: null };
-      }
-      const cheapest = offers.reduce((a, b) =>
-        a.totalAmount <= b.totalAmount ? a : b
-      );
-      return {
-        date,
-        cheapestAmount: cheapest.totalAmount,
-        currency: cheapest.currency,
-        owner: cheapest.owner,
-        stops: cheapest.maxStops,
-      };
-    } catch {
-      return { date, cheapestAmount: null, currency: null, owner: null, stops: null };
-    }
+  const cacheKey = (date: string) =>
+    `${body.origin}|${body.destination}|${date}|${cabin}|${gridMaxConnections}`;
+
+  const empty = (date: string): GridCell => ({
+    date,
+    cheapestAmount: null,
+    currency: null,
+    owner: null,
+    stops: null,
   });
+
+  async function fetchCell(date: string): Promise<GridCell> {
+    return gridCache.getOrCompute(cacheKey(date), async () => {
+      try {
+        const offers = await searchOffers(
+          {
+            origin: body.origin,
+            destination: body.destination,
+            date,
+            tripType: "one_way",
+            adults: body.adults || 1,
+            cabinClass: body.cabinClass,
+            maxConnections: gridMaxConnections,
+          },
+          // Short per-airline timeout — grid is just an indicator.
+          { supplierTimeoutMs: 4000 }
+        );
+        if (offers.length === 0) return empty(date);
+        const cheapest = offers.reduce((a, b) =>
+          a.totalAmount <= b.totalAmount ? a : b
+        );
+        return {
+          date,
+          cheapestAmount: cheapest.totalAmount,
+          currency: cheapest.currency,
+          owner: cheapest.owner,
+          stops: cheapest.maxStops,
+        };
+      } catch {
+        return empty(date);
+      }
+    });
+  }
+
+  // Fire all days in PARALLEL, but stagger the *start* of each by
+  // ~110ms so we stay under Duffel's rate limit. Cached days resolve
+  // instantly and still get a (harmless) tiny stagger delay.
+  const cells: GridCell[] = await Promise.all(
+    dates.map(async (date, i) => {
+      await sleep(i * STAGGER_MS);
+      return fetchCell(date);
+    })
+  );
 
   return NextResponse.json({ cells });
 }
